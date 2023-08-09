@@ -56,38 +56,6 @@ impl fmt::Debug for L32 {
     }
 }
 
-impl Add for L32 {
-    type Output = Self;
-
-    #[inline]
-    fn add(self, rhs: Self) -> Self {
-        todo!();
-    }
-}
-
-impl AddAssign for L32 {
-    #[inline]
-    fn add_assign(&mut self, rhs: Self) {
-        *self = *self + rhs;
-    }
-}
-
-impl Sub for L32 {
-    type Output = Self;
-
-    #[inline]
-    fn sub(self, rhs: Self) -> Self {
-        todo!()
-    }
-}
-
-impl SubAssign for L32 {
-    #[inline]
-    fn sub_assign(&mut self, rhs: Self) {
-        *self = *self - rhs;
-    }
-}
-
 impl Mul<L32> for L32 {
     type Output = Self;
 
@@ -138,7 +106,7 @@ impl Div<L32> for L32 {
 impl DivAssign<L32> for L32 {
     #[inline]
     fn div_assign(&mut self, rhs: L32) {
-        *self = *self * rhs;
+        *self = *self / rhs;
     }
 }
 
