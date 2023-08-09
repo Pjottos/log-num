@@ -3,4 +3,9 @@ name = "log-num"
 version = "0.1.0"
 edition = "2021"
 
+license = "Apache-2.0"
+description = "Implementation of a logarithmic number system"
+homepage = "https://github.com/Pjottos/log-num"
+repository = "https://github.com/Pjottos/log-num"
+
 [dependencies]
