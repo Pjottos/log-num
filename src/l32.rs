@@ -40,12 +40,26 @@ impl L32 {
         res
     }
 
-    /// Convert the number to an integer exponent and a signed 1.31 mantissa in range (-1, 1).
+    /// Convert the number to an integer exponent and a 3.29 mantissa in range (-1, 1).
     /// This is inherently a lossy conversion as the logarithmic form contains many irrational numbers,
     /// in addition to the error introduced by the amount of bits we use for the mantissa.
     #[inline]
     fn to_exp_mantissa(self) -> (i32, i32) {
+        const A_VALUES: [u32; 4] = [0; 4];
+        const B_VALUES: [u32; 4] = [0; 4];
+        const C_VALUES: [u32; 4] = [0; 4];
+
         let exp = (self.0 << 1) as i32 >> 25;
+        let frac = self.0 & 0x00FFFFFF;
+
+        todo!()
+    }
+
+    /// Convert the given sign bit, integer exponent and 0.32 mantissa in range [0, 1) to logarithmic form.
+    /// This is a lossy conversion.
+    #[inline]
+    fn from_sign_exp_mantissa(sign: bool, exp: i32, mantissa: u32) -> Self {
+        todo!()
     }
 }
 
@@ -131,36 +145,44 @@ impl Add for L32 {
         // to keep the table size reasonable. These transformations are quite complex and still require
         // about 32KiB of lookup storage at 31 bit precision with 0.5 ulp error.
         // Therefore we opt for a simpler approach of performing the addition in a pseudo floating point
-        // format and converting the number before and after. This only requires a few constants instead
-        // of a whole LUT and thus allows for higher throughput in SIMD code as it obviates
-        // gather instructions.
+        // format and converting the numbers before and after. This allows using a drastically smaller LUT
+        // and thus allows for higher throughput in SIMD code as it obviates gather instructions.
 
         let (self_exp, self_mantissa) = self.to_exp_mantissa();
         let (rhs_exp, rhs_mantissa) = rhs.to_exp_mantissa();
         // Addition is commutative so by arranging the arguments by magnitude we simplify
         // normalizing the arguments.
         let delta = self_exp - rhs_exp;
-        let (a_mantissa, b_mantissa, shift_amount) = if delta < 0 {
-            (rhs_mantissa, self_mantissa, (-delta) as u32)
+        let (a_exp, a_mantissa, b_mantissa, shift_amount) = if delta < 0 {
+            (rhs_exp, rhs_mantissa, self_mantissa, (-delta) as u32)
         } else {
-            (self_mantissa, rhs_mantissa, delta as u32)
+            (self_exp, self_mantissa, rhs_mantissa, (-delta) as u32)
         };
 
         let mut b_normalized = b_mantissa.wrapping_shr(shift_amount);
         // If we shift out all the fraction bits the result should be 0 regardless of the sign of the
-        // mantissa. Otherwise we have a bias for negative numbers as for a positive number this will
-        // yield 0 while with negative numbers it will yield -2^-31.
-        if shift_amount >= 31 {
+        // mantissa. Otherwise we have a bias for negative numbers as for positive numbers this will
+        // yield 0 while with negative numbers it will yield -2^-29.
+        if shift_amount >= 29 {
             b_normalized = 0;
         }
-        // The actual addition
-        let res_mantissa = a_mantissa + b_normalized
+        // The actual addition.
+        // Rounding happens during the conversions from/to logarithmic form, it doesn't really make sense
+        // to round the mantissa to some amount of bits.
+        let added = a_mantissa + b_normalized;
 
-        // Rounding happens in the real domain, i.e. we round based on the represented value instead
-        // of the exponent value
+        // Normalize the result
+        let sign = added < 0;
+        let unsigned = if sign { -added } else { added } as u32;
+        let normalize_shift = (unsigned & 0x1FFFFFFF).leading_zeros();
+        // We add 3 to account for the 3 integer bits that were cleared out in the result.
+        // Since we're only adding two numbers, the mantissa is guaranteed to be less than 2 so right shifting
+        // by 29 means we add either 0 or 1 to the exponent.
+        let res_exp = a_exp + 3 - normalize_shift as i32 + (unsigned >> 29) as i32;
+        // Normalize to a 0.32 value
+        let res_mantissa = unsigned << normalize_shift;
 
-        res.0 |= result_sign;
-
+        let mut res = Self::from_sign_exp_mantissa(sign, res_exp, res_mantissa);
         if self == Self::ZERO {
             res = rhs;
         }
